@@ -25,6 +25,7 @@ class MainActivity : AppCompatActivity() {
  private var model: Interpreter? = null
  private var tone: ToneGenerator? = null
  @Volatile private var mutedUntil = 0L
+ @Volatile private var threshold = 0.40f
  private var lastAlert = -10000L
  override fun onCreate(state: Bundle?) {
   super.onCreate(state)
@@ -41,7 +42,16 @@ class MainActivity : AppCompatActivity() {
   buttons.addView(Button(this).apply { text="اختبار الصوت"; setOnClickListener { alert() } })
   buttons.addView(Button(this).apply { text="كتم 10 ث"; setOnClickListener { mutedUntil=SystemClock.elapsedRealtime()+10000 } })
   buttons.addView(Button(this).apply { text="نافذة"; setOnClickListener { enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(9,16)).build()) } })
-  root.addView(buttons,FrameLayout.LayoutParams(-1,-2,android.view.Gravity.BOTTOM))
+  val controls=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+  val sensitivity=TextView(this).apply { text="عتبة الثقة 40%"; setTextColor(Color.WHITE); setBackgroundColor(Color.BLACK) }
+  controls.addView(sensitivity)
+  controls.addView(SeekBar(this).apply { max=80; progress=30; setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
+   override fun onProgressChanged(s:SeekBar?,p:Int,u:Boolean){ threshold=(p+10)/100f; sensitivity.text="عتبة الثقة "+(p+10)+"%" }
+   override fun onStartTrackingTouch(s:SeekBar?) {}
+   override fun onStopTrackingTouch(s:SeekBar?) {}
+  }) })
+  controls.addView(buttons)
+  root.addView(controls,FrameLayout.LayoutParams(-1,-2,android.view.Gravity.BOTTOM))
   setContentView(root)
   try {
    tone=ToneGenerator(AudioManager.STREAM_ALARM,100)
@@ -94,10 +104,12 @@ class MainActivity : AppCompatActivity() {
    require(channels>=5)
    fun v(c:Int,i:Int)=if(transposed)out[0][c][i] else out[0][i][c]
    val boxes=mutableListOf<Pair<RectF,Float>>()
+   var peak=0f
    for(i in 0 until count){
     var score=0f
     for(c in 4 until channels)score=maxOf(score,v(c,i))
-    if(score<0.65f || !score.isFinite())continue
+    if(score.isFinite()) peak=maxOf(peak,score)
+    if(score<threshold || !score.isFinite())continue
     val x=v(0,i);val y=v(1,i);val bw=v(2,i);val bh=v(3,i)
     val sx=if(maxOf(kotlin.math.abs(x),kotlin.math.abs(bw))>2f)w.toFloat() else 1f
     val sy=if(maxOf(kotlin.math.abs(y),kotlin.math.abs(bh))>2f)h.toFloat() else 1f
@@ -106,7 +118,7 @@ class MainActivity : AppCompatActivity() {
    val best=boxes.maxByOrNull{it.second}
    runOnUiThread {
     overlay.box=best?.first;overlay.invalidate()
-    status.text=if(best==null)"الرصد نشط" else "تم الرصد "+(best.second*100).toInt()+"%"
+    status.text=if(best==null)"الرصد نشط | أعلى ثقة "+(peak*100).toInt()+"%" else "تم الرصد "+(best.second*100).toInt()+"%"
     val now=SystemClock.elapsedRealtime()
     if(best!=null && now>=mutedUntil && now-lastAlert>=3000){lastAlert=now;alert()}
    }
