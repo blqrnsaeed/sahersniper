@@ -10,6 +10,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import android.hardware.camera2.CameraCharacteristics
+import androidx.camera.core.CameraInfo
+import androidx.camera.core.Camera
+import androidx.camera.core.CameraSelector
 import androidx.core.content.ContextCompat
 import org.tensorflow.lite.Interpreter
 import java.nio.*
@@ -27,6 +32,10 @@ class MainActivity : AppCompatActivity() {
  @Volatile private var mutedUntil = 0L
  @Volatile private var threshold = 0.40f
  private var lastAlert = -10000L
+ private var boundCamera: Camera? = null
+ private var requestedZoom = 1f
+ private lateinit var zoomButtons: List<Button>
+ private val zoomPreferences by lazy { getSharedPreferences("camera_zoom",MODE_PRIVATE) }
  override fun onCreate(state: Bundle?) {
   super.onCreate(state)
   window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -38,13 +47,24 @@ class MainActivity : AppCompatActivity() {
   root.addView(overlay)
   status = TextView(this).apply { text = "جاري تحميل النموذج"; setTextColor(Color.WHITE); setBackgroundColor(0xAA000000.toInt()); textSize=18f }
   root.addView(status, FrameLayout.LayoutParams(-1,-2,android.view.Gravity.TOP))
+  requestedZoom = zoomPreferences.getFloat("zoom_ratio",1f).takeIf { it in listOf(1f,2f,3f) } ?: 1f
   val buttons = LinearLayout(this)
   buttons.addView(Button(this).apply { text="اختبار الصوت"; setOnClickListener { alert() } })
   buttons.addView(Button(this).apply { text="كتم 10 ث"; setOnClickListener { mutedUntil=SystemClock.elapsedRealtime()+10000 } })
   buttons.addView(Button(this).apply { text="نافذة"; setOnClickListener { enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(9,16)).build()) } })
   val controls=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
   val sensitivity=TextView(this).apply { text="عتبة الثقة 40%"; setTextColor(Color.WHITE); setBackgroundColor(Color.BLACK) }
+  val zoomRow = LinearLayout(this).apply { gravity=android.view.Gravity.CENTER; orientation=LinearLayout.HORIZONTAL }
+  zoomButtons=listOf(1f,2f,3f).map { ratio ->
+   Button(this).apply {
+    text="${ratio.toInt()}X"
+    setOnClickListener { setZoom(ratio) }
+    zoomRow.addView(this, LinearLayout.LayoutParams(0,-2,1f))
+   }
+  }
+  controls.addView(zoomRow)
   controls.addView(sensitivity)
+  updateZoomButtons()
   controls.addView(SeekBar(this).apply { max=80; progress=30; setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener {
    override fun onProgressChanged(s:SeekBar?,p:Int,u:Boolean){ threshold=(p+10)/100f; sensitivity.text="عتبة الثقة "+(p+10)+"%" }
    override fun onStartTrackingTouch(s:SeekBar?) {}
@@ -66,6 +86,35 @@ class MainActivity : AppCompatActivity() {
   tone?.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD,700)
   (getSystemService(VIBRATOR_SERVICE) as Vibrator).vibrate(VibrationEffect.createOneShot(400,VibrationEffect.DEFAULT_AMPLITUDE))
  }
+ private fun updateZoomButtons() {
+  if(!::zoomButtons.isInitialized)return
+  zoomButtons.forEachIndexed { i, button ->
+   val selected = requestedZoom == (i+1).toFloat()
+   button.alpha = if(selected) 1f else 0.65f
+   button.isSelected = selected
+  }
+ }
+ private fun setZoom(ratio:Float) {
+  val camera=boundCamera
+  if(camera==null) {
+   requestedZoom=ratio
+   zoomPreferences.edit().putFloat("zoom_ratio",ratio).apply()
+   updateZoomButtons()
+   return
+  }
+  val min=camera.cameraInfo.zoomState.value?.minZoomRatio ?: 1f
+  val max=camera.cameraInfo.zoomState.value?.maxZoomRatio ?: 1f
+  if(ratio<min || ratio>max) {
+   Toast.makeText(this,"مستوى تقريب ${ratio.toInt()}X غير مدعوم في هذه الكاميرا",Toast.LENGTH_SHORT).show()
+   return
+  }
+  camera.cameraControl.setZoomRatio(ratio).addListener({
+   // CameraX changes the preview and analysis crop together.
+   requestedZoom=ratio
+   zoomPreferences.edit().putFloat("zoom_ratio",ratio).apply()
+   updateZoomButtons()
+  },ContextCompat.getMainExecutor(this))
+ }
  private fun camera() {
   val f=ProcessCameraProvider.getInstance(this)
   f.addListener({
@@ -75,7 +124,30 @@ class MainActivity : AppCompatActivity() {
     val a=ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
     a.setAnalyzer(executor){ analyze(it) }
     provider.unbindAll()
-    provider.bindToLifecycle(this,CameraSelector.DEFAULT_BACK_CAMERA,p,a)
+    // Prefer the rear default camera, which generally exposes the primary 1x camera.
+    // If Camera2 metadata is accessible, explicitly prefer a rear-facing camera with
+    // a focal length near the device's 1x baseline (rather than ultrawide).
+    val rearSelector=CameraSelector.Builder()
+     .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+     .addCameraFilter { cameras ->
+      val candidates=cameras.toList()
+      if(candidates.isEmpty())return@addCameraFilter cameras
+      val primary=candidates.maxByOrNull { info ->
+       try {
+        val ch=Camera2CameraInfo.from(info).getCameraCharacteristic(
+         CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+        ch?.minOrNull() ?: 0f
+       } catch (_:Exception) { 0f }
+      }
+      if(primary==null) cameras else listOf(primary)
+     }.build()
+    boundCamera=try {
+     provider.bindToLifecycle(this,rearSelector,p,a)
+    } catch(primaryError:Exception) {
+     provider.unbindAll()
+     provider.bindToLifecycle(this,CameraSelector.DEFAULT_BACK_CAMERA,p,a)
+    }
+    setZoom(requestedZoom)
    } catch(e:Exception){ status.text="خطأ الكاميرا: "+e.message }
   },ContextCompat.getMainExecutor(this))
  }
