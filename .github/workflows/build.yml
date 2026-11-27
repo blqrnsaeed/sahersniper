@@ -1,4 +1,4 @@
-name: Build SaherSniper APK
+name: Build APK
 on: [push]
 
 jobs:
@@ -11,191 +11,78 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Generate Android App & Build APK
+      - name: Build SaherSniper
         run: |
           python3 - << 'EOF'
           import os, shutil
-          base = "SaherSniperApp"
+          b = "SaherSniperApp"
           for d in ["app/src/main/java/com/saher/sniper", "app/src/main/res/layout", "app/src/main/assets"]:
-              os.makedirs(f"{base}/{d}", exist_ok=True)
-          shutil.copy("best.tflite", f"{base}/app/src/main/assets/best.tflite")
+              os.makedirs(f"{b}/{d}", exist_ok=True)
+          shutil.copy("best.tflite", f"{b}/app/src/main/assets/best.tflite")
 
-          open(f"{base}/settings.gradle", "w").write('''
-          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-          rootProject.name = "SaherSniper"
-          include ":app"
-          ''')
+          open(f"{b}/settings.gradle", "w").write('pluginManagement{repositories{google();mavenCentral();gradlePluginPortal()}}\ndependencyResolutionManagement{repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS);repositories{google();mavenCentral()}}\nrootProject.name="SaherSniper"\ninclude ":app"\n')
+          open(f"{b}/build.gradle", "w").write('plugins{id "com.android.application" version "8.2.2" apply false;id "org.jetbrains.kotlin.android" version "1.9.22" apply false}\n')
+          open(f"{b}/gradle.properties", "w").write("android.useAndroidX=true\norg.gradle.jvmargs=-Xmx2048m\n")
 
-          open(f"{base}/build.gradle", "w").write('''
-          plugins {
-              id "com.android.application" version "8.2.2" apply false
-              id "org.jetbrains.kotlin.android" version "1.9.22" apply false
-          }
-          ''')
+          open(f"{b}/app/build.gradle", "w").write('''plugins{id "com.android.application";id "org.jetbrains.kotlin.android"}
+          android{namespace "com.saher.sniper";compileSdk 34
+          defaultConfig{applicationId "com.saher.sniper";minSdk 26;targetSdk 34;versionCode 1;versionName "1.0"}
+          compileOptions{sourceCompatibility JavaVersion.VERSION_17;targetCompatibility JavaVersion.VERSION_17}
+          kotlinOptions{jvmTarget="17"}
+          aaptOptions{noCompress "tflite"}}
+          dependencies{implementation "androidx.core:core-ktx:1.12.0";implementation "androidx.appcompat:appcompat:1.6.1";implementation "androidx.camera:camera-core:1.3.1";implementation "androidx.camera:camera-camera2:1.3.1";implementation "androidx.camera:camera-lifecycle:1.3.1";implementation "androidx.camera:camera-view:1.3.1";implementation "org.tensorflow:tensorflow-lite:2.14.0"}''')
 
-          open(f"{base}/gradle.properties", "w").write("android.useAndroidX=true\norg.gradle.jvmargs=-Xmx2048m\n")
-
-          open(f"{base}/app/build.gradle", "w").write('''
-          plugins {
-              id "com.android.application"
-              id "org.jetbrains.kotlin.android"
-          }
-          android {
-              namespace "com.saher.sniper"
-              compileSdk 34
-              defaultConfig {
-                  applicationId "com.saher.sniper"
-                  minSdk 26
-                  targetSdk 34
-                  versionCode 1
-                  versionName "1.0"
-              }
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-              kotlinOptions { jvmTarget = "17" }
-              aaptOptions { noCompress "tflite" }
-          }
-          dependencies {
-              implementation "androidx.core:core-ktx:1.12.0"
-              implementation "androidx.appcompat:appcompat:1.6.1"
-              implementation "androidx.camera:camera-core:1.3.1"
-              implementation "androidx.camera:camera-camera2:1.3.1"
-              implementation "androidx.camera:camera-lifecycle:1.3.1"
-              implementation "androidx.camera:camera-view:1.3.1"
-              implementation "org.tensorflow:tensorflow-lite:2.14.0"
-          }
-          ''')
-
-          open(f"{base}/app/src/main/AndroidManifest.xml", "w").write('''<?xml version="1.0" encoding="utf-8"?>
+          open(f"{b}/app/src/main/AndroidManifest.xml", "w").write('''<?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://android.com">
-              <uses-feature android:name="android.hardware.camera" android:required="true"/>
-              <uses-permission android:name="android.permission.CAMERA"/>
-              <uses-permission android:name="android.permission.VIBRATE"/>
-              <application android:label="قناص ساهر" android:theme="@style/Theme.AppCompat.NoActionBar">
-                  <activity android:name=".MainActivity" android:exported="true"
-                      android:supportsPictureInPicture="true"
-                      android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
-                      android:screenOrientation="portrait">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          ''')
+          <uses-feature android:name="android.hardware.camera" android:required="true"/>
+          <uses-permission android:name="android.permission.CAMERA"/>
+          <uses-permission android:name="android.permission.VIBRATE"/>
+          <application android:label="قناص ساهر" android:theme="@style/Theme.AppCompat.NoActionBar">
+          <activity android:name=".MainActivity" android:exported="true" android:supportsPictureInPicture="true" android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation" android:screenOrientation="portrait">
+          <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+          </activity></application></manifest>''')
 
-          open(f"{base}/app/src/main/res/layout/activity_main.xml", "w").write('''<?xml version="1.0" encoding="utf-8"?>
-          <FrameLayout xmlns:android="http://android.com"
-              android:layout_width="match_parent" android:layout_height="match_parent"
-              android:background="#000000" android:keepScreenOn="true">
-              <androidx.camera.view.PreviewView android:id="@+id/previewView"
-                  android:layout_width="match_parent" android:layout_height="match_parent"/>
-              <com.saher.sniper.OverlayView android:id="@+id/overlayView"
-                  android:layout_width="match_parent" android:layout_height="match_parent"/>
-              <TextView android:id="@+id/statusBanner"
-                  android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:layout_gravity="top" android:background="#AA000000"
-                  android:gravity="center" android:padding="14dp"
-                  android:text="🟢 القناص نشط" android:textColor="#00FF88"
-                  android:textSize="20sp" android:textStyle="bold"/>
-              <LinearLayout android:id="@+id/controlsLayout"
-                  android:layout_width="match_parent" android:layout_height="wrap_content"
-                  android:layout_gravity="bottom" android:background="#AA000000"
-                  android:orientation="horizontal" android:padding="12dp">
-                  <Button android:id="@+id/btnMute" android:layout_width="0dp"
-                      android:layout_height="wrap_content" android:layout_weight="1"
-                      android:text="🔇 كتم 10ث"/>
-                  <Button android:id="@+id/btnPip" android:layout_width="0dp"
-                      android:layout_height="wrap_content" android:layout_weight="1"
-                      android:text="🪟 نافذة عائمة"/>
-              </LinearLayout>
-          </FrameLayout>
-          ''')
+          open(f"{b}/app/src/main/res/layout/activity_main.xml", "w").write('''<?xml version="1.0" encoding="utf-8"?>
+          <FrameLayout xmlns:android="http://android.com" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000" android:keepScreenOn="true">
+          <androidx.camera.view.PreviewView android:id="@+id/pv" android:layout_width="match_parent" android:layout_height="match_parent"/>
+          <com.saher.sniper.OverlayView android:id="@+id/ov" android:layout_width="match_parent" android:layout_height="match_parent"/>
+          <TextView android:id="@+id/tv" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="top" android:background="#AA000000" android:gravity="center" android:padding="14dp" android:text="🟢 القناص نشط" android:textColor="#00FF88" android:textSize="20sp" android:textStyle="bold"/>
+          <LinearLayout android:id="@+id/cl" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="bottom" android:background="#AA000000" android:orientation="horizontal" android:padding="12dp">
+          <Button android:id="@+id/bm" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="🔇 كتم 10ث"/>
+          <Button android:id="@+id/bp" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="🪟 نافذة عائمة"/>
+          </LinearLayout></FrameLayout>''')
 
-          open(f"{base}/app/src/main/java/com/saher/sniper/OverlayView.kt", "w").write('''package com.saher.sniper
-          import android.content.Context
-          import android.graphics.*
-          import android.util.AttributeSet
-          import android.view.View
+          open(f"{b}/app/src/main/java/com/saher/sniper/OverlayView.kt", "w").write('''package com.saher.sniper
+          import android.content.Context;import android.graphics.*;import android.util.AttributeSet;import android.view.View
+          class OverlayView(c:Context,a:AttributeSet?):View(c,a){
+          private var bx=emptyList<RectF>();private var cf=emptyList<Float>()
+          private val p1=Paint().apply{color=Color.RED;style=Paint.Style.STROKE;strokeWidth=8f}
+          private val p2=Paint().apply{color=Color.YELLOW;textSize=48f;typeface=Typeface.DEFAULT_BOLD}
+          fun upd(x:List<RectF>,y:List<Float>){bx=x;cf=y;postInvalidate()}
+          override fun onDraw(c:Canvas){super.onDraw(c);for(i in bx.indices){val r=bx[i];val rc=RectF(r.left*width,r.top*height,r.right*width,r.bottom*height);c.drawRect(rc,p1);c.drawText("ساهر ${(cf[i]*100).toInt()}%",rc.left,maxOf(60f,rc.top-12f),p2)}}}''')
 
-          class OverlayView(c: Context, a: AttributeSet?) : View(c, a) {
-              private var boxes = emptyList<RectF>()
-              private var confs = emptyList<Float>()
-              private val bp = Paint().apply { color = Color.RED; style = Paint.Style.STROKE; strokeWidth = 8f }
-              private val tp = Paint().apply { color = Color.YELLOW; textSize = 48f; typeface = Typeface.DEFAULT_BOLD }
-
-              fun updateDetections(b: List<RectF>, cf: List<Float>) {
-                  boxes = b; confs = cf; postInvalidate()
-              }
-
-              override fun onDraw(canvas: Canvas) {
-                  super.onDraw(canvas)
-                  for (i in boxes.indices) {
-                      val r = boxes[i]
-                      val rect = RectF(r.left * width, r.top * height, r.right * width, r.bottom * height)
-                      canvas.drawRect(rect, bp)
-                      canvas.drawText("ساهر ${(confs[i]*100).toInt()}%", rect.left, maxOf(60f, rect.top - 12f), tp)
-                  }
-              }
-          }
-          ''')
-
-          open(f"{base}/app/src/main/java/com/saher/sniper/MainActivity.kt", "w").write('''package com.saher.sniper
-          import android.Manifest
-          import android.app.PictureInPictureParams
-          import android.content.Context
-          import android.content.pm.PackageManager
-          import android.content.res.Configuration
-          import android.graphics.*
-          import android.media.*
-          import android.os.*
-          import android.speech.tts.TextToSpeech
-          import android.util.Rational
-          import android.view.View
-          import android.widget.*
-          import androidx.appcompat.app.AppCompatActivity
-          import androidx.camera.core.*
-          import androidx.camera.lifecycle.ProcessCameraProvider
-          import androidx.camera.view.PreviewView
-          import androidx.core.app.ActivityCompat
-          import androidx.core.content.ContextCompat
-          import org.tensorflow.lite.Interpreter
-          import java.io.FileInputStream
-          import java.nio.*
-          import java.nio.channels.FileChannel
-          import java.util.*
-          import java.util.concurrent.Executors
-
-          class MainActivity : AppCompatActivity() {
-              private lateinit var previewView: PreviewView
-              private lateinit var overlayView: OverlayView
-              private lateinit var statusBanner: TextView
-              private lateinit var controlsLayout: LinearLayout
-              private var interpreter: Interpreter? = null
-              private var tts: TextToSpeech? = null
-              private var toneGen: ToneGenerator? = null
-              private val exec = Executors.newSingleThreadExecutor()
-              private var hits = 0
-              private var lastAlert = 0L
-              private var mutedUntil = 0L
-              private var inputSize = 512
-
-              override fun onCreate(s: Bundle?) {
-                  super.onCreate(s)
-                  setContentView(R.layout.activity_main)
-                  previewView = findViewById(R.id.previewView)
-                  overlayView = findViewById(R.id.overlayView)
-                  statusBanner = findViewById(R.id.statusBanner)
-                  controlsLayout = findViewById(R.id.controlsLayout)
-                  toneGen = ToneGenerator(AudioManager.STREAM_ALARM, 100)
-                  tts = TextToSpeech(this) { if (it == TextToSpeech.SUCCESS) tts?.language = Locale("ar") }
-                  findViewById<Button>(R.id.btnMute).setOnClickListener {
-                      mutedUntil = System.currentTimeMillis() + 10000L
-                      statusBanner.text = "🔇 مكتوم 10ث"
-                  }
-                  findViewById<Button>(R.id.btnPip).setOnClickListener { enterPip() }
-                  loadModel()
+          open(f"{b}/app/src/main/java/com/saher/sniper/MainActivity.kt", "w").write('''package com.saher.sniper
+          import android.Manifest;import android.app.PictureInPictureParams;import android.content.Context;import android.content.pm.PackageManager;import android.content.res.Configuration;import android.graphics.*;import android.media.*;import android.os.*;import android.speech.tts.TextToSpeech;import android.util.Rational;import android.view.View;import android.widget.*;import androidx.appcompat.app.AppCompatActivity;import androidx.camera.core.*;import androidx.camera.lifecycle.ProcessCameraProvider;import androidx.camera.view.PreviewView;import androidx.core.app.ActivityCompat;import androidx.core.content.ContextCompat;import org.tensorflow.lite.Interpreter;import java.io.FileInputStream;import java.nio.*;import java.nio.channels.FileChannel;import java.util.*;import java.util.concurrent.Executors
+          class MainActivity:AppCompatActivity(){
+          private lateinit var pv:PreviewView;private lateinit var ov:OverlayView;private lateinit var tv:TextView;private lateinit var cl:LinearLayout
+          private var tf:Interpreter?=null;private var tts:TextToSpeech?=null;private var tg:ToneGenerator?=null;private val ex=Executors.newSingleThreadExecutor()
+          private var hits=0;private var lastA=0L;private var muteU=0L;private var sz=512
+          override fun onCreate(s:Bundle?){super.onCreate(s);setContentView(R.layout.activity_main)
+          pv=findViewById(R.id.pv);ov=findViewById(R.id.ov);tv=findViewById(R.id.tv);cl=findViewById(R.id.cl)
+          tg=ToneGenerator(AudioManager.STREAM_ALARM,100);tts=TextToSpeech(this){if(it==TextToSpeech.SUCCESS)tts?.language=Locale("ar")}
+          findViewById<Button>(R.id.bm).setOnClickListener{muteU=System.currentTimeMillis()+10000L;tv.text="🔇 مكتوم 10ث"}
+          findViewById<Button>(R.id.bp).setOnClickListener{pip()}
+          val afd=assets.openFd("best.tflite");val buf=FileInputStream(afd.fileDescriptor).channel.map(FileChannel.MapMode.READ_ONLY,afd.startOffset,afd.declaredLength)
+          tf=Interpreter(buf,Interpreter.Options().apply{setNumThreads(4)});val sh=tf?.getInputTensor(0)?.shape();if(sh!=null&&sh.size>=3)sz=sh
+          if(ContextCompat.checkSelfPermission(this,Manifest.permission.CAMERA)==PackageManager.PERMISSION_GRANTED)cam()else ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.CAMERA),100)}
+          private fun pip(){if(Build.VERSION.SDK_INT>=26)enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(9,16)).build())}
+          override fun onUserLeaveHint(){super.onUserLeaveHint();pip()}
+          override fun onPictureInPictureModeChanged(p:Boolean,c:Configuration){super.onPictureInPictureModeChanged(p,c);cl.visibility=if(p)View.GONE else View.VISIBLE;tv.textSize=if(p)12f else 20f}
+          private fun cam(){val f=ProcessCameraProvider.getInstance(this);f.addListener({val cp=f.get();val p=Preview.Builder().build().also{it.setSurfaceProvider(pv.surfaceProvider)};val a=ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build().also{it.setAnalyzer(ex){i->run(i)}};cp.unbindAll();cp.bindToLifecycle(this,CameraSelector.DEFAULT_BACK_CAMERA,p,a)},ContextCompat.getMainExecutor(this))}
+          private fun run(img:ImageProxy){val itf=tf?:run{img.close();return};val bmp=img.toBitmap();val m=Matrix().apply{postRotate(img.imageInfo.rotationDegrees.toFloat())};val rot=Bitmap.createBitmap(bmp,0,0,bmp.width,bmp.height,m,true);val res=Bitmap.createScaledBitmap(rot,sz,sz,true)
+          val ib=ByteBuffer.allocateDirect(4*sz*sz*3).apply{order(ByteOrder.nativeOrder())};val px=IntArray(sz*sz);res.getPixels(px,0,sz,0,0,sz,sz)
+          for(p in px){ib.putFloat(((p shr 16)and 0xFF)/255f);ib.putFloat(((p shr 8)and 0xFF)/255f);ib.putFloat((p and 0xFF)/255f)}
+          val os=itf.getOutputTensor(0).shape();val out=Array(1){Array(os){FloatArray(os)}};itf.run(ib,out)
+          val bxs=mutableListOf<RectF>();val cfs=mutableListOf<Float>();var mc=0f
+          for(i in 0 until os){val c=out[i];if(c>0.65f){if(c>mc)mc=c;val cx=out[i];val cy=out[i];val w=out[i];val h=out[i];bxs.add(RectF(cx-w/2f,cy-h/2f,cx+w/2f,cy+h/2f));cfs.add(c)}}
+          ov.upd(bxs,cfs);if(bxs.isNotEmpty()){hits++;if(hits>=2)alrt(mc)}else{hits=0;if(System.currentTimeMillis()>muteU)runOnUiThread{tv.text="🟢 القناص نشط";tv.setTextColor(Color.parseColor("#00FF88"))}};img.close()}
