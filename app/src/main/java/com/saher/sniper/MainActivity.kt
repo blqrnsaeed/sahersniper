@@ -10,9 +10,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.camera.camera2.interop.Camera2CameraInfo
-import android.hardware.camera2.CameraCharacteristics
-import androidx.camera.core.CameraInfo
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.core.content.ContextCompat
@@ -109,7 +106,9 @@ class MainActivity : AppCompatActivity() {
    return
   }
   camera.cameraControl.setZoomRatio(ratio).addListener({
-   // CameraX changes the preview and analysis crop together.
+   // CameraX applies the same zoom crop to preview and analysis.
+   try { camera.cameraInfo.zoomState.value ?: throw IllegalStateException("Zoom state unavailable") }
+   catch (e:Exception) { Toast.makeText(this,"تعذر تطبيق التقريب",Toast.LENGTH_SHORT).show(); return@addListener }
    requestedZoom=ratio
    zoomPreferences.edit().putFloat("zoom_ratio",ratio).apply()
    updateZoomButtons()
@@ -124,29 +123,9 @@ class MainActivity : AppCompatActivity() {
     val a=ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
     a.setAnalyzer(executor){ analyze(it) }
     provider.unbindAll()
-    // Prefer the rear default camera, which generally exposes the primary 1x camera.
-    // If Camera2 metadata is accessible, explicitly prefer a rear-facing camera with
-    // a focal length near the device's 1x baseline (rather than ultrawide).
-    val rearSelector=CameraSelector.Builder()
-     .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-     .addCameraFilter { cameras ->
-      val candidates=cameras.toList()
-      if(candidates.isEmpty())return@addCameraFilter cameras
-      val primary=candidates.maxByOrNull { info ->
-       try {
-        val ch=Camera2CameraInfo.from(info).getCameraCharacteristic(
-         CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-        ch?.minOrNull() ?: 0f
-       } catch (_:Exception) { 0f }
-      }
-      if(primary==null) cameras else listOf(primary)
-     }.build()
-    boundCamera=try {
-     provider.bindToLifecycle(this,rearSelector,p,a)
-    } catch(primaryError:Exception) {
-     provider.unbindAll()
-     provider.bindToLifecycle(this,CameraSelector.DEFAULT_BACK_CAMERA,p,a)
-    }
+    // CameraX's default rear logical camera is the device's main 1x camera path.
+    // Selecting by longest focal length can accidentally pick a telephoto lens.
+    boundCamera=provider.bindToLifecycle(this,CameraSelector.DEFAULT_BACK_CAMERA,p,a)
     setZoom(requestedZoom)
    } catch(e:Exception){ status.text="خطأ الكاميرا: "+e.message }
   },ContextCompat.getMainExecutor(this))
