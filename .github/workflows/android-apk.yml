@@ -1,7 +1,7 @@
 name: Android APK
 on:
   push:
-    branches: [android-build]
+    branches: [android-build, feature/main-camera-zoom-1x-2x-3x]
   workflow_dispatch:
 jobs:
   build:
