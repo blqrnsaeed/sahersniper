@@ -73,17 +73,19 @@ class MainActivity : AppCompatActivity() {
   try {
    val m=model ?: return
    val shape=m.getInputTensor(0).shape()
-   require(shape.size==4 && shape[3]==3 && m.getInputTensor(0).dataType()==org.tensorflow.lite.DataType.FLOAT32)
-   val h=shape[1]; val w=shape[2]
+   require(shape.contentEquals(intArrayOf(1,3,512,512)) && m.getInputTensor(0).dataType()==org.tensorflow.lite.DataType.FLOAT32)
+   val h=shape[2]; val w=shape[3]
    val b=img.toBitmap()
    val rot=Bitmap.createBitmap(b,0,0,b.width,b.height,Matrix().apply{postRotate(img.imageInfo.rotationDegrees.toFloat())},true)
    val resized=Bitmap.createScaledBitmap(rot,w,h,true)
    val pixels=IntArray(w*h); resized.getPixels(pixels,0,w,0,0,w,h)
    val input=ByteBuffer.allocateDirect(w*h*12).order(ByteOrder.nativeOrder())
-   for(p in pixels){input.putFloat(Color.red(p)/255f);input.putFloat(Color.green(p)/255f);input.putFloat(Color.blue(p)/255f)}
+   for(p in pixels) input.putFloat(Color.red(p)/255f)
+   for(p in pixels) input.putFloat(Color.green(p)/255f)
+   for(p in pixels) input.putFloat(Color.blue(p)/255f)
    input.rewind()
    val s=m.getOutputTensor(0).shape()
-   require(s.size==3 && s[0]==1)
+   require(s.contentEquals(intArrayOf(1,5,5376))) { "Output: "+s.contentToString() }
    val out=Array(1){Array(s[1]){FloatArray(s[2])}}
    m.run(input,out)
    val transposed=s[1]<s[2]
